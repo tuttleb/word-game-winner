@@ -1,21 +1,210 @@
-class Node():
+class LetterNode():
     __slots__ = ('children', 'val', 'isEndValue')
     
     def __init__(self, val, isEndValue, children):
+        """Creates a new LetterNode
+
+        val -- The letter in this node
+        isEndValue -- Bool determining if a word ends at this node
+        children -- A list of child letter nodes
+        """
+
         self.val = val
         self.isEndValue = isEndValue
         self.children = children
     
 class Configuration():
-    __slots__ = ('position', 'board', 'word', 'parent')
+    """Represents a 'swipe' on the board. A valid configuration is either an
+    english word or the beginning of one.
+    """
+
+    __slots__ = ('position', 'blocks', 'word', 'parent')
     
-    def __init__(self, position, board, word, parent=None):
+    def __init__(self, position, blocks, word, parent=None):
+        """Creates a new configuration
+
+        position -- The index of the current tile, that is the last one in a
+            'swipe'
+        blocks -- A list of all blocks from the board. Blocks that are already in
+            use for this configuration have a value of None
+        word -- The word built by this configurations 'swipe'
+        parent -- The config that led to this one. This allows for tracing a
+            'swipe' back to the start (Default None)
+        """
+
         self.position = position
-        self.board = board
+        self.blocks = blocks
         self.word = word
         self.parent = parent
+
+    def isValid(self, wordTree):
+        """Determines if this configuration is valid.
+        Validity Rules:
+        - No block can be used twice
+        - A block ending with '-' can only be the first block in a word
+        - A block beginning with '-' can only the last block in a word
+        - The blocks must make up a word in the word tree, or must be the
+            beginning of a word in the word tree
+
+        wordTree -- A tree representing all valid words
+        """
+
+        length = len(self.word)
+        for i, block in enumerate(self.word):
+            if block is None:
+                #The same block was used twice
+                return False
+            if i != 0 and block.endswith("-"):
+                #A block ending with a '-' must be the first block in a word
+                return False
+            elif i != length-1 and block.startswith("-"):
+                #A block beginning with '-' must be the last block in a word
+                return False
+                
+        #Turn the blocks into a string
+        wholeWord = "".join(self.word).replace("-", "")
+        current = wordTree
+        for character in wholeWord:
+            if character in current:
+                current = current[character].children
+            else:
+                return False
+        return True
+
+    def isWord(self, wordTree):
+        """Determines if the configuration represents an english word
+
+        wordTree -- A tree representing all valid words
+        """
+
+        wholeWord = "".join(self.word).replace("-", "")    
+        current = wordTree
+        length = len(wholeWord) - 1
+        
+        for i, character in enumerate(wholeWord):
+            if i == length:
+                if(character in current):
+                    return current[character].isEndValue
+                else:
+                    return False
+            if character in current:
+                current = current[character].children
+            else:
+                return False
+
+    def getDescendents(self, board):
+        """Returns a list of configurations that descend from this one.
+        Descendents represent continuing the swipe to an adjacent block.
+
+        board -- The board this onfig is on
+        """
+
+        neighborPositions = []
+        
+        #top middle
+        if self.position >= board.width:
+            neighborPositions += [self.position - board.width]
+
+        #bottom middle
+        if self.position < (board.height - 1) * board.width:
+            neighborPositions += [self.position + board.width]
+
+        #left
+        if self.position % board.width != 0:
+            neighborPositions += [self.position - 1]
+
+            #top left
+            if self.position >= board.width:
+                neighborPositions += [self.position - board.width - 1]
+
+            #bottom left
+            if self.position < (board.height - 1) * board.width:
+                neighborPositions += [self.position + board.width - 1]
+
+
+        #right
+        if self.position % board.width != board.width - 1:
+            neighborPositions += [self.position + 1]
+
+            #top right
+            if self.position >= board.width:
+                neighborPositions += [self.position - board.width + 1]
+
+            #bottom right
+            if self.position < (board.height - 1) * board.width:
+                neighborPositions += [self.position + board.width + 1]
+
+        descendents = []
+
+        for position in neighborPositions:
+            blocksCopy = self.blocks[:]
+            blocksCopy[position] = None
+            newConfig = Configuration(position, blocksCopy, self.word + [self.blocks[position]], parent = self)
+            descendents += [newConfig]
+
+        return descendents
+
+class Board():
+    __slots__ = ('blocks', 'width', 'height')
+    _MAX_LETTER_WIDTH = 3
+
+    def __init__(self, blocks, width, height):
+        """Creates a new board
+
+        blocks -- A list of blocks from the board ordered from left to right, 
+            top to bottom. In many cases a block is a single letter, but it can
+            also be a combination of symbols representing special rules for the
+            block
+        width -- The width of the board
+        height -- Theh height of the board
+        """
+        self.blocks = blocks
+        self.width = width
+        self.height = height
+
+    def __str__(self):
+        """
+        Returns a string representation of the baord
+        """
+        result = ""
+        for row in range(self.height):
+            for col in range(self.width):
+                block = self.blocks[row * self.width + col]
+                result += format(block, '^' + str(Board._MAX_LETTER_WIDTH))
+            result += '\n'
+        return result
+
+    def solve(self, wordTree):
+        """Returns a list of all words that this board contains
+
+        wordTree -- A tree representing all words
+        """
+
+        foundWords = []
+        for blockPosition in range(len(self.blocks)):
+            adjustedBlocks = self.blocks[:]
+            adjustedBlocks[blockPosition] = None #Mark off the current letter as used
+            newConfig = Configuration(blockPosition, adjustedBlocks, [self.blocks[blockPosition]])
+            possibilities = [newConfig]
+
+            while possibilities:
+                currentConfig = possibilities.pop(0)
+
+                if not currentConfig.isValid(wordTree):
+                    continue
+
+                possibilities += currentConfig.getDescendents(self)
+                if currentConfig.isWord(wordTree) and "".join(currentConfig.word) not in foundWords:
+                    foundWords.append("".join(currentConfig.word))
+
+        return foundWords
         
 def populateWords(wordFile = "wordsEn.txt"):
+    """Return a word tree using the words from the provided file.
+
+    wordFile -- The file to read
+    """
+
     root = {}
     
     for word in open(wordFile):
@@ -27,13 +216,13 @@ def populateWords(wordFile = "wordsEn.txt"):
                     currentPos[character].isEndValue = True
                 currentPos = currentPos[character].children
             else:
-                newNode = Node(character, i == length, {})
+                newNode = LetterNode(character, i == length, {})
                 currentPos[character] = newNode
                 currentPos = newNode.children
                 
     return root
     
-def getBoard():
+def getBlocks():
     count = 0
     vals = [''] * 16
     
@@ -46,38 +235,6 @@ def getBoard():
             count += 1
     return vals
 
-def printBoard(board):
-    for i in range(16):
-        if i % 4 == 0:
-            print()
-        print(board[i], end="\t")
-    print()
-    
-def solve(board, words):
-    count = 0
-    found = []
-    for position in range(16):
-        newBoard = board[:]
-        newBoard[position] = None
-        newConfig = Configuration(position, newBoard, [board[position]])
-        if not isValid(newConfig, words):
-            continue
-        possibilities = [newConfig]
-        
-        while possibilities:
-            count += 1
-            next = possibilities.pop(0)
-            possibilities  += getDescendents(next, words)
-            if isWord(next, words) and "".join(next.word) not in found:
-                found.append("".join(next.word))
-                #printWord(next)
-    found.sort(key=len)
-    while(found):
-        for i in range(8):
-            if found:
-                print(found.pop())
-                print()
-        input("...")
         
 def printWord(configuration):
     word = "".join(configuration.word).replace('-','')
@@ -97,41 +254,6 @@ def printWord(configuration):
         print(boardCopy[i], end="\t")
     print("\n----------------------------------------------------")
     """
-        
-def isValid(configuration, words):
-    length = len(configuration.word)
-    for i, block in enumerate(configuration.word):
-        if block is None:
-            return False
-        if i != 0 and block.endswith("-"):
-            return False
-        elif i != length-1 and block.startswith("-"):
-            return False
-            
-    wholeWord = "".join(configuration.word).replace("-", "")
-    current = words
-    for character in wholeWord:
-        if character in current:
-            current = current[character].children
-        else:
-            return False
-    return True
-    
-def isWord(configuration, words):
-    wholeWord = "".join(configuration.word).replace("-", "")    
-    current = words
-    length = len(wholeWord) - 1
-    
-    for i, character in enumerate(wholeWord):
-        if i == length:
-            if(character in current):
-                return current[character].isEndValue
-            else:
-                return False
-        if character in current:
-            current = current[character].children
-        else:
-            return False
     
 def getDescendents(configuration, words):
     descendents = []
@@ -197,24 +319,10 @@ def main():
     words = populateWords()
     #printWordTree(words)
     #board = ['n','u','i','s','m','a','r','e','n','o','w','r','e','m','o','t']
-    board = getBoard()
-    printBoard(board)
-    solve(board, words)
+    blocks = getBlocks()
+    b = Board(blocks, 4, 4)
+    solution = b.solve(words)
+    print(solution)
     
 if __name__ == "__main__":
     main()
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
