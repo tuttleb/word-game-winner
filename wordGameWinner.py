@@ -1,3 +1,5 @@
+import argparse
+
 class LetterNode():
     __slots__ = ('children', 'val', 'isEndValue')
     
@@ -139,8 +141,12 @@ class Configuration():
         for position in neighborPositions:
             blocksCopy = self.blocks[:]
             blocksCopy[position] = None
-            newConfig = Configuration(position, blocksCopy, self.word + [self.blocks[position]], parent = self)
-            descendents += [newConfig]
+
+            if self.blocks[position] is not None:
+                for grouping in self.blocks[position].split('/'):
+                    #Allows for alternate letters separated by the '/' character
+                    newConfig = Configuration(position, blocksCopy, self.word + [grouping], parent = self)
+                    descendents += [newConfig]
 
         return descendents
 
@@ -175,7 +181,7 @@ class Board():
         return result
 
     def solve(self, wordTree):
-        """Returns a list of all words that this board contains
+        """Returns a list of  words that this board contains
 
         wordTree -- A tree representing all words
         """
@@ -199,7 +205,7 @@ class Board():
 
         return foundWords
         
-def populateWords(wordFile = "wordsEn.txt"):
+def populateWords(wordFile):
     """Return a word tree using the words from the provided file.
 
     wordFile -- The file to read
@@ -221,83 +227,7 @@ def populateWords(wordFile = "wordsEn.txt"):
                 currentPos = newNode.children
                 
     return root
-    
-def getBlocks():
-    count = 0
-    vals = [''] * 16
-    
-    while count < 16:
-        nextBlock = input("Next block (submit nothing to go back): ")
-        if nextBlock == "" and count > 0:
-            count -= 1
-        else:
-            vals[count] = nextBlock
-            count += 1
-    return vals
-
-        
-def printWord(configuration):
-    word = "".join(configuration.word).replace('-','')
-    count = len(word)
-    print("----------------------------------------------------")
-    print(word)
-    """
-    boardCopy = configuration.board[:]
-    current = configuration
-    while count > 0:
-        boardCopy[current.position] = count
-        count -= 1
-        current = current.parent
-    for i in range(16):
-        if i % 4 == 0:
-            print()
-        print(boardCopy[i], end="\t")
-    print("\n----------------------------------------------------")
-    """
-    
-def getDescendents(configuration, words):
-    descendents = []
-
-    #top left
-    if configuration.position % 4 != 0 and configuration.position > 3:
-        _descendentHelper(configuration, words, configuration.position - 5, descendents)
-            
-    #top
-    if configuration.position > 3:
-        _descendentHelper(configuration, words, configuration.position - 4, descendents)
-        
-    #top right
-    if (configuration.position+1) % 4 != 0 and configuration.position > 3:
-        _descendentHelper(configuration, words, configuration.position - 3, descendents)
-        
-    #right
-    if (configuration.position+1) % 4 != 0:
-         _descendentHelper(configuration, words, configuration.position + 1, descendents)
-         
-    #bottom right
-    if (configuration.position+1) % 4 != 0 and configuration.position < 12:
-        _descendentHelper(configuration, words, configuration.position + 5, descendents)
-        
-    #bottom
-    if configuration.position < 12:
-        _descendentHelper(configuration, words, configuration.position + 4, descendents)
-        
-    #bottom left
-    if configuration.position < 12 and configuration.position % 4 != 0:
-        _descendentHelper(configuration, words, configuration.position + 3, descendents)
-        
-    #left
-    if configuration.position % 4 != 0:
-        _descendentHelper(configuration, words, configuration.position - 1, descendents)
-    return descendents
-    
-def _descendentHelper(configuration, words, currentPos, descendents):
-    boardCopy = configuration.board[:]
-    boardCopy[currentPos] = None
-    newConfig = Configuration(currentPos, boardCopy, configuration.word + [configuration.board[currentPos]], configuration)
-    if isValid(newConfig, words):
-        descendents.append(newConfig)
-   
+ 
 def printWordTree(words):
     for key in words.keys():
         print(key + ": ", end="")
@@ -314,15 +244,57 @@ def _printWordTreeHelper(root):
         print('}', end="")
     else:
         print("{}", end="")
+
+def isValidDimension(value):
+    """Determines if the value provided is a valid board dimension. Throws an
+        argparse.ArgumentTypeError if the argument is not an integer and
+        greater than zero.
+
+    value -- The value being checked
+    """
+    try:
+        i = int(value)
+        if i <= 0:
+            raise ValueError()
+        return i
+    except ValueError:
+        raise argparse.ArgumentTypeError("%s is not an integer greater than zero" % value)
         
 def main():
-    words = populateWords()
-    #printWordTree(words)
-    #board = ['n','u','i','s','m','a','r','e','n','o','w','r','e','m','o','t']
-    blocks = getBlocks()
-    b = Board(blocks, 4, 4)
-    solution = b.solve(words)
-    print(solution)
+    parser = argparse.ArgumentParser(description="Finds words on provided board")
+
+    parser.add_argument('width', type=isValidDimension, help="the width of the board")
+    parser.add_argument('height', type=isValidDimension, help="the height of the board")
+    parser.add_argument('blocks', help="the blocks on the board from left to right, top to bottom. These should be comma delimited with no spaces")
+    #parser.add_argument('form', choices=['list','grids'])
+    parser.add_argument('--count', dest='count', type=int, default=100)
+    parser.add_argument('--sort', dest='sort', choices=['largest','smallest','none'], default='largest')
+    parser.add_argument('--words', dest='words', default='wordsEn.txt', help="name of the file that contains a list of words to look for")
+    parser.add_argument('--interactive', dest='interactive', default=False, action='store_true', help="determines if the program should dump out text or step through interactively")
+
+    args = parser.parse_args()
     
+    blocks = args.blocks.split(',')
+
+    b = Board(blocks, args.width, args.height)
+    words = populateWords(args.words)
+
+    solution = b.solve(words)
+
+    if args.sort == 'largest':
+        solution.sort(key=len, reverse=True)
+    elif args.sort == 'smallest':
+        solution.sort(key=len)
+
+    printed_count = 0
+    for word in solution:
+        if printed_count >= args.count and args.count >= 0:
+            break
+        if args.interactive and printed_count != 0 and printed_count % 5 == 0:
+            input("########### press enter to continue...")
+
+        print(word)
+        printed_count += 1
+
 if __name__ == "__main__":
     main()
