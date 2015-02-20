@@ -39,6 +39,9 @@ class Configuration():
         self.word = word
         self.parent = parent
 
+    def __cmp__(self, other):
+        pass
+
     def isValid(self, wordTree):
         """Determines if this configuration is valid.
         Validity Rules:
@@ -291,7 +294,9 @@ def main():
         if printed_count >= args.count and args.count >= 0:
             break
         if args.interactive and printed_count != 0 and printed_count % 5 == 0:
-            input("########### press enter to continue...")
+            user_input = input("press enter to continue... (q to quit)")
+            if user_input == 'q':
+                break
 
         print(word)
         printed_count += 1
