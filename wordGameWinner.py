@@ -1,4 +1,6 @@
 import argparse
+import sys
+import time
 
 class LetterNode():
     __slots__ = ('children', 'val', 'isEndValue')
@@ -290,16 +292,36 @@ def main():
         solution.sort(key=len)
 
     printed_count = 0
+    incorrect = set()
+
+    if args.interactive:
+        print("Press enter to advance")
+
     for word in solution:
         if printed_count >= args.count and args.count >= 0:
             break
-        if args.interactive and printed_count != 0 and printed_count % 5 == 0:
-            user_input = input("press enter to continue... (q to quit)")
-            if user_input == 'q':
+        
+        sys.stdout.write(word + "\n")
+        printed_count += 1
+
+        if args.interactive and printed_count != 0:
+            #user_input = input("enter to continue (q to quit, x to mark word as incorrect)")
+            #if user_input == 'q':
+            #    break
+            #if user_input == 'x':
+            #    incorrect.add(word)
+            
+            while True:
+                line = sys.stdin.readline()
+                sys.stdin.write("\r")
+                sys.stdin.flush()
+                sys.stdout.write("\r")
+                sys.stdout.flush()
+
                 break
 
-        print(word)
-        printed_count += 1
+            
+
 
 if __name__ == "__main__":
     main()
